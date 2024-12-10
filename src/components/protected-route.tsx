@@ -22,25 +22,21 @@ export function ProtectedRoute({
   useSessionTimeout();
 
   useEffect(() => {
+    // Hanya redirect jika benar-benar tidak ada session dan loading selesai
     if (!isLoading && !session) {
       const returnUrl = encodeURIComponent(pathname);
       router.replace(`${redirectTo}?from=${returnUrl}`);
     }
   }, [session, isLoading, router, pathname, redirectTo]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
-      </div>
-    );
+  // Tampilkan children selama loading atau ada session
+  // Ini mencegah flash of blank page
+  if (isLoading || session) {
+    return <>{children}</>;
   }
 
-  if (!session) {
-    return null;
-  }
-
-  return <>{children}</>;
+  // Jangan render apapun saat akan redirect
+  return null;
 }
 
 export function useSessionTimeout() {

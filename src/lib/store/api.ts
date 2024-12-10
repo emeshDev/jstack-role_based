@@ -32,6 +32,7 @@ export const api = createApi({
         email: string;
         name?: string;
         emailVerified: string | null;
+        deviceId: string;
       }
     >({
       query: (data) =>
@@ -39,6 +40,7 @@ export const api = createApi({
           userId: data.userId,
           email: data.email,
           name: data.name,
+          deviceId: data.deviceId,
           emailVerified: data.emailVerified
             ? new Date(data.emailVerified).toISOString()
             : null,
@@ -64,6 +66,13 @@ export const api = createApi({
           session: response.session,
         };
       },
+    }),
+
+    cleanupSessions: builder.mutation<
+      { success: boolean },
+      { deviceId: string }
+    >({
+      query: (data) => client.authsession.cleanupSessions.$post(data),
     }),
 
     logout: builder.mutation<{ success: boolean }, void>({

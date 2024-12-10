@@ -4,6 +4,7 @@ export interface User {
   email: string;
   name?: string | null;
   emailVerified?: Date | null;
+  deviceId?: string | null;
 }
 
 export interface Session {

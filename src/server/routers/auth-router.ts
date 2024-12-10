@@ -12,6 +12,7 @@ export const authRouter = router({
         email: z.string().email(),
         name: z.string().optional(),
         emailVerified: z.string().nullable(),
+        deviceId: z.string(),
       })
     )
     .mutation(async ({ c, input, ctx }) => {
@@ -42,10 +43,14 @@ export const authRouter = router({
         const expiryTime = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 jam
 
         const session = await db.session.upsert({
-          where: { token },
+          where: {
+            token: ctx.token,
+            deviceId: input.deviceId,
+          },
           create: {
             userId: user.id,
-            token,
+            token: ctx.token,
+            deviceId: input.deviceId,
             expires: expiryTime,
             userAgent: c.req.header("user-agent"),
             ipAddress:
@@ -105,9 +110,11 @@ export const authRouter = router({
   logout: privateProcedure.mutation(async ({ c, ctx }) => {
     try {
       const { token } = ctx;
+
       await db.session.deleteMany({
         where: { token },
       });
+
       return c.json({ success: true });
     } catch (error) {
       console.error("Logout error: ", error);
@@ -116,4 +123,39 @@ export const authRouter = router({
       });
     }
   }),
+
+  cleanupSessions: privateProcedure
+    .input(z.object({ deviceId: z.string() }))
+    .mutation(async ({ c, input, ctx }) => {
+      try {
+        // Hanya hapus session untuk device ini
+        await db.session.deleteMany({
+          where: {
+            AND: [
+              { deviceId: input.deviceId },
+              { userId: ctx.supabaseUser.id },
+              {
+                OR: [
+                  { expires: { lt: new Date() } },
+                  {
+                    lastActivity: {
+                      lt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        });
+
+        return c.json({ success: true });
+      } catch (error) {
+        throw new HTTPException(500, {
+          message:
+            error instanceof Error
+              ? error.message
+              : "Failed to cleanup sessions",
+        });
+      }
+    }),
 });

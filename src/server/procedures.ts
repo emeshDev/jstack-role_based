@@ -6,11 +6,14 @@ import { db } from "@/db";
 const authMiddleware = j.middleware(async ({ c, next }) => {
   try {
     const authHeader = c.req.header("Authorization");
+    console.log("Logout - Auth Header:", authHeader);
+
     if (!authHeader?.startsWith("Bearer ")) {
       throw new HTTPException(401, { message: "Missing auth token" });
     }
 
     const token = authHeader.split(" ")[1];
+    console.log("Logout - Token to be deleted:", token);
 
     // Verifikasi token
     const { data, error } = await supabase.auth.getUser(token);
@@ -20,7 +23,6 @@ const authMiddleware = j.middleware(async ({ c, next }) => {
       });
     }
 
-    // Hanya attach data ke context
     return next({
       supabaseUser: data.user,
       token,

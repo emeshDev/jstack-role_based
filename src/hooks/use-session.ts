@@ -9,6 +9,7 @@ interface RawSession {
     email: string;
     name?: string | null;
     emailVerified?: string | Date | null;
+    deviceId?: string | null;
   };
 }
 
@@ -19,7 +20,8 @@ export function useSession() {
 
   const fetchSession = useCallback(async () => {
     try {
-      setIsLoading(true);
+      // Jangan set loading ke true setiap fetch
+      // Hanya set loading di awal mounting
       const fetchedSession = (await getSession()) as RawSession | null;
 
       if (fetchedSession?.user) {
@@ -45,25 +47,34 @@ export function useSession() {
           : (new Error("Failed to fetch session") as SessionError)
       );
       setSession(null);
-    } finally {
-      setIsLoading(false);
     }
   }, []);
 
-  // Auto refresh window setiap 50 menit (10 menit sebelum token expire)
+  // Initial fetch saat mount
   useEffect(() => {
-    if (!session) return;
+    setIsLoading(true);
+    fetchSession().finally(() => {
+      setIsLoading(false);
+    });
+  }, [fetchSession]);
 
-    const refreshTimer = setInterval(() => {
-      window.location.reload();
-    }, 50 * 60 * 1000); // 50 menit
-
-    return () => clearInterval(refreshTimer);
-  }, [session]);
-  // Listen untuk auth state changes
+  // Handle visibility change
   useEffect(() => {
-    fetchSession();
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible" && session) {
+        // Hanya fetch jika sebelumnya ada session
+        await fetchSession();
+      }
+    };
 
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchSession, session]);
+
+  // Auth state change listener
+  useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event) => {
@@ -79,6 +90,17 @@ export function useSession() {
       subscription.unsubscribe();
     };
   }, [fetchSession]);
+
+  // Auto refresh token setiap 50 menit
+  useEffect(() => {
+    if (!session) return;
+
+    const refreshTimer = setInterval(() => {
+      fetchSession();
+    }, 50 * 60 * 1000);
+
+    return () => clearInterval(refreshTimer);
+  }, [session, fetchSession]);
 
   return {
     session,

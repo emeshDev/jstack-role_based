@@ -38,4 +38,5 @@ model Session {
   lastActivity  DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  deviceId      String?
 }

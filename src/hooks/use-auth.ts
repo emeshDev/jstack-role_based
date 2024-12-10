@@ -1,5 +1,5 @@
 import { supabase, setupAuthListeners } from "@/lib/auth";
-import { client } from "@/lib/client";
+import { getDeviceId } from "@/lib/device";
 import { useLogoutMutation, useSyncAuthSessionMutation } from "@/lib/store/api";
 import { resetState } from "@/lib/store/rootReducer";
 import { persistor } from "@/lib/store/store";
@@ -43,6 +43,9 @@ export const useAuth = (options: UseAuthOptions = {}) => {
       if (error) throw error;
       if (!session || !user) throw new Error("No session created");
 
+      const deviceId = getDeviceId();
+      if (!deviceId) throw new Error("Failed to generate device ID");
+
       await syncAuthSession({
         userId: user.id,
         email: user.email ?? "",
@@ -50,6 +53,7 @@ export const useAuth = (options: UseAuthOptions = {}) => {
         emailVerified: user.email_confirmed_at
           ? new Date(user.email_confirmed_at).toISOString()
           : null,
+        deviceId,
       });
 
       if (options.redirectTo) {
@@ -70,36 +74,38 @@ export const useAuth = (options: UseAuthOptions = {}) => {
     try {
       setIsLoading(true);
 
-      // 1. Clear database session
+      // 1. Clear database session menggunakan auth header dari client.ts
       await logout();
 
-      // 2. Clear Supabase auth
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      // 2. Clear Supabase session
+      const { error: supabaseError } = await supabase.auth.signOut();
+      if (supabaseError) throw supabaseError;
 
-      // 4. Reset redux store
+      // 3. Reset redux store
       dispatch(resetState());
 
-      // 3. Clear Redux persist storage
-      persistor.purge();
+      // 4. Clear Redux persist storage
+      await persistor.purge();
 
       // 5. Clear localStorage
       if (typeof window !== "undefined") {
         localStorage.clear();
       }
 
-      // 6. Redirect dan refresh
-      router.replace(options.redirectTo || "/auth/signin");
-      router.refresh();
+      // 6. Hard redirect
+      if (typeof window !== "undefined") {
+        const redirectPath = options.redirectTo || "/auth/signin";
+        window.location.replace(redirectPath);
+      }
     } catch (err) {
       console.error("Logout error:", err);
       setError({
         message: err instanceof Error ? err.message : "Failed to sign out",
       });
-      // Tetap lanjutkan logout client-side meskipun ada error di server
-      router.replace(options.redirectTo || "/auth/signin");
-    } finally {
-      setIsLoading(false);
+
+      if (typeof window !== "undefined") {
+        window.location.replace(options.redirectTo || "/auth/signin");
+      }
     }
   };
 
