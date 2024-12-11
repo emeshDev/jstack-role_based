@@ -1,3 +1,4 @@
+// this is example of making of endpoints logic / controllers
 import { db } from "@/db";
 import { router } from "../__internals/router";
 import { privateProcedure, publicProcedure } from "../procedures";
