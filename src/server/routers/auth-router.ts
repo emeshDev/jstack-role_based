@@ -1,3 +1,4 @@
+// this is auth router /controller , i hope you wont changed it
 import { db } from "@/db";
 import { router } from "../__internals/router";
 import { privateProcedure } from "../procedures";
