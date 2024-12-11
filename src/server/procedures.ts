@@ -52,6 +52,9 @@ const authMiddleware = j.middleware(async ({ c, next }) => {
   }
 });
 
+// You can make any middlewares , such us rate limiting or server's webhook
+// to Server's Middleware
+
 export const baseProcedure = j.procedure;
 export const publicProcedure = baseProcedure;
 export const privateProcedure = publicProcedure.use(authMiddleware);
