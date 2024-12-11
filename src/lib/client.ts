@@ -27,20 +27,12 @@ const getBaseUrl = () => {
 
 export const baseClient = hc<AppType>(getBaseUrl(), {
   fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
-    // Get session token
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    // Add auth header if session exists
-    const headers = new Headers(init?.headers || {});
-    if (session?.access_token) {
-      headers.set("Authorization", `Bearer ${session.access_token}`);
-    }
-
+    // Tidak perlu eksplisit mengambil session token karena cookies
+    // akan dikirim otomatis oleh browser untuk setiap request
     const response = await fetch(input, {
       ...init,
-      headers,
+      // Pastikan credentials included agar cookies dikirim
+      credentials: "include",
       cache: "no-store",
     });
 

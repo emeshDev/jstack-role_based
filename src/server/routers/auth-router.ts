@@ -158,4 +158,35 @@ export const authRouter = router({
         });
       }
     }),
+
+  clearAuthCookies: privateProcedure.mutation(async ({ c, ctx }) => {
+    try {
+      const projectRef = process.env.NEXT_PUBLIC_SUPABASE_URL?.match(
+        /https:\/\/(.*?)\.supabase/
+      )?.[1];
+
+      // Set each cookie clear header individually
+      c.header(
+        "Set-Cookie",
+        `supabase-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=strict`
+      );
+      c.header(
+        "Set-Cookie",
+        `sb-${projectRef}-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=strict`
+      );
+      c.header(
+        "Set-Cookie",
+        `device_id=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; secure; samesite=strict`
+      );
+
+      return c.json({ success: true });
+    } catch (error) {
+      throw new HTTPException(500, {
+        message:
+          error instanceof Error
+            ? error.message
+            : "Failed to clear auth cookies",
+      });
+    }
+  }),
 });

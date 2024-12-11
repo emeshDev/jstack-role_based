@@ -1,5 +1,5 @@
-// src/app/auth/signup/page.tsx
 "use client";
+// src/app/auth/signup/page.tsx
 
 import { useAuth } from "@/hooks/use-auth";
 import { signUpSchema, type SignUpForm } from "@/lib/schemas/auth";

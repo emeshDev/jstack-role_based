@@ -25,7 +25,9 @@ export function ProtectedRoute({
     // Hanya redirect jika benar-benar tidak ada session dan loading selesai
     if (!isLoading && !session) {
       const returnUrl = encodeURIComponent(pathname);
-      router.replace(`${redirectTo}?from=${returnUrl}`);
+      // router.replace(`${redirectTo}?from=${returnUrl}`);
+      // Gunakan window.location.replace untuk memastikan full page refresh
+      window.location.replace(`${redirectTo}?from=${returnUrl}`);
     }
   }, [session, isLoading, router, pathname, redirectTo]);
 

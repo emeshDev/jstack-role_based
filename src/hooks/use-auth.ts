@@ -1,6 +1,11 @@
+"use client";
 import { supabase, setupAuthListeners } from "@/lib/auth";
 import { getDeviceId } from "@/lib/device";
-import { useLogoutMutation, useSyncAuthSessionMutation } from "@/lib/store/api";
+import {
+  useClearAuthCookiesMutation,
+  useLogoutMutation,
+  useSyncAuthSessionMutation,
+} from "@/lib/store/api";
 import { resetState } from "@/lib/store/rootReducer";
 import { persistor } from "@/lib/store/store";
 import { useRouter } from "next/navigation";
@@ -22,6 +27,7 @@ export const useAuth = (options: UseAuthOptions = {}) => {
   const [syncAuthSession] = useSyncAuthSessionMutation();
   const dispatch = useDispatch();
   const [logout] = useLogoutMutation();
+  const [clearCookies] = useClearAuthCookiesMutation();
 
   useEffect(() => {
     setupAuthListeners();
@@ -74,44 +80,67 @@ export const useAuth = (options: UseAuthOptions = {}) => {
     try {
       setIsLoading(true);
 
-      // 1. Clear database session menggunakan auth header dari client.ts
-      await logout();
+      // 1. Clear database session
+      await logout().unwrap();
 
-      // 2. Clear Supabase session
-      const { error: supabaseError } = await supabase.auth.signOut();
-      if (supabaseError) throw supabaseError;
-
-      // 3. Reset redux store
+      // 2. Reset redux store and storage
       dispatch(resetState());
-
-      // 4. Clear Redux persist storage
       await persistor.purge();
 
-      // 5. Clear localStorage
-      if (typeof window !== "undefined") {
-        localStorage.clear();
-      }
+      // 3. Clear Supabase session
+      await supabase.auth.signOut();
 
-      // 6. Hard redirect
-      if (typeof window !== "undefined") {
-        const redirectPath = options.redirectTo || "/auth/signin";
-        window.location.replace(redirectPath);
-      }
+      // 4. Direct redirect tanpa reload
+      window.location.replace(options.redirectTo || "/auth/signin");
     } catch (err) {
-      console.error("Logout error:", err);
-      setError({
-        message: err instanceof Error ? err.message : "Failed to sign out",
-      });
+      console.error("Sign out error:", err);
 
-      if (typeof window !== "undefined") {
-        window.location.replace(options.redirectTo || "/auth/signin");
-      }
+      // Force redirect even on error
+      window.location.replace(options.redirectTo || "/auth/signin");
+    } finally {
+      // Make sure loading is set to false
+      setIsLoading(false);
     }
   };
 
+  const signUp = async (
+    email: string,
+    password: string,
+    metadata?: { full_name?: string }
+  ) => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: metadata,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (error) throw error;
+
+      // Langsung redirect ke verify-email page
+      // Tidak perlu sync session dulu
+      if (options.redirectTo) {
+        router.push(options.redirectTo);
+      }
+    } catch (err) {
+      setError({
+        message: err instanceof Error ? err.message : "Failed to sign up",
+      });
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
   return {
     signIn,
     signOut,
+    signUp,
     isLoading,
     error,
   };

@@ -1,3 +1,4 @@
+"use client";
 // src/hooks/use-session.ts
 import { useState, useEffect, useCallback } from "react";
 import { Session, SessionError } from "@/types";
@@ -83,6 +84,7 @@ export function useSession() {
         await fetchSession();
       } else if (event === "SIGNED_OUT") {
         setSession(null);
+        window.location.reload();
       }
     });
 

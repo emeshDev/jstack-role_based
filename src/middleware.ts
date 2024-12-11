@@ -8,7 +8,23 @@ export async function middleware(request: NextRequest) {
   const supabase = createMiddlewareClient({ req: request, res });
 
   // Refresh session jika ada
-  await supabase.auth.getSession();
+  const {
+    data: { session },
+    error,
+  } = await supabase.auth.getSession();
+
+  // Set cookie secure parameters
+  if (session) {
+    res.cookies.set({
+      name: "supabase-auth-token",
+      value: session.access_token,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 60 * 60 * 24, // 24 hours
+    });
+  }
 
   return res;
 }
