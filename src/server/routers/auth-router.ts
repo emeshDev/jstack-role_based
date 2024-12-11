@@ -55,13 +55,18 @@ export const authRouter = router({
             userAgent: c.req.header("user-agent"),
             ipAddress:
               c.req.header("x-forwarded-for") || c.req.header("x-real-ip"),
+            lastActivity: supabaseUser.last_sign_in_at
+              ? new Date(supabaseUser.last_sign_in_at)
+              : new Date(), // fallback ke current time
           },
           update: {
-            lastActivity: new Date(),
             expires: expiryTime,
             userAgent: c.req.header("user-agent"),
             ipAddress:
               c.req.header("x-forwarded-for") || c.req.header("x-real-ip"),
+            lastActivity: supabaseUser.last_sign_in_at
+              ? new Date(supabaseUser.last_sign_in_at)
+              : new Date(), // fallback ke current time
           },
         });
 
