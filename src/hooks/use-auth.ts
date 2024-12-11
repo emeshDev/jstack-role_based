@@ -1,11 +1,7 @@
 "use client";
 import { supabase, setupAuthListeners } from "@/lib/auth";
 import { getDeviceId } from "@/lib/device";
-import {
-  useClearAuthCookiesMutation,
-  useLogoutMutation,
-  useSyncAuthSessionMutation,
-} from "@/lib/store/api";
+import { useLogoutMutation, useSyncAuthSessionMutation } from "@/lib/store/api";
 import { resetState } from "@/lib/store/rootReducer";
 import { persistor } from "@/lib/store/store";
 import { useRouter } from "next/navigation";
@@ -27,7 +23,6 @@ export const useAuth = (options: UseAuthOptions = {}) => {
   const [syncAuthSession] = useSyncAuthSessionMutation();
   const dispatch = useDispatch();
   const [logout] = useLogoutMutation();
-  const [clearCookies] = useClearAuthCookiesMutation();
 
   useEffect(() => {
     setupAuthListeners();
@@ -124,7 +119,6 @@ export const useAuth = (options: UseAuthOptions = {}) => {
       if (error) throw error;
 
       // Langsung redirect ke verify-email page
-      // Tidak perlu sync session dulu
       if (options.redirectTo) {
         router.push(options.redirectTo);
       }

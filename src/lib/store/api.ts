@@ -68,19 +68,8 @@ export const api = createApi({
       },
     }),
 
-    cleanupSessions: builder.mutation<
-      { success: boolean },
-      { deviceId: string }
-    >({
-      query: (data) => client.authsession.cleanupSessions.$post(data),
-    }),
-
     logout: builder.mutation<{ success: boolean }, void>({
       query: () => client.authsession.logout.$post(),
-    }),
-
-    clearAuthCookies: builder.mutation<{ success: boolean }, void>({
-      query: () => client.authsession.clearAuthCookies.$post(),
     }),
   }),
 });
@@ -89,5 +78,4 @@ export const {
   useSyncAuthSessionMutation,
   useUpdateSessionMutation,
   useLogoutMutation,
-  useClearAuthCookiesMutation,
 } = api;
