@@ -56,16 +56,111 @@ const authMiddleware = j.middleware(async ({ c, next }) => {
 
 // You can make any middlewares , such us rate limiting or server's webhook
 // to Server's Middleware
-export const rateLimitMiddleware = j.middleware(async ({ c, next }) => {
-  try {
-    const redisUrl = c.env?.REDIS_URL || process.env.REDIS_URL;
-    const redisToken = c.env?.REDIS_TOKEN || process.env.REDIS_TOKEN;
+// Memory fallback jika tidak ada Redis
+class MemoryStore {
+  private store: Map<string, { count: number; expires: number }>;
 
-    const redis = new Redis({
-      url: redisUrl,
-      token: redisToken,
-      automaticDeserialization: false,
-    });
+  constructor() {
+    this.store = new Map();
+  }
+
+  async increment(key: string, ttl: number): Promise<number> {
+    const now = Date.now();
+    const record = this.store.get(key);
+
+    if (!record || record.expires < now) {
+      this.store.set(key, {
+        count: 1,
+        expires: now + ttl * 1000,
+      });
+      return 1;
+    }
+
+    record.count += 1;
+    return record.count;
+  }
+
+  async get(key: string): Promise<number | null> {
+    const now = Date.now();
+    const record = this.store.get(key);
+
+    if (!record || record.expires < now) {
+      this.store.delete(key);
+      return null;
+    }
+
+    return record.count;
+  }
+}
+
+// Helper untuk get env variables dengan prioritas
+const getEnvVar = (c: any, key: string): string => {
+  return c?.env[key] || process.env[key] || "";
+};
+
+// Factory untuk rate limiter
+const createRateLimiter = (c: any) => {
+  let redis: Redis | null = null;
+  let memoryStore: MemoryStore | null = null;
+
+  try {
+    // Coba inisialisasi Redis jika env tersedia
+    const REDIS_URL = getEnvVar(c, "REDIS_URL");
+    const REDIS_TOKEN = getEnvVar(c, "REDIS_TOKEN");
+
+    if (REDIS_URL && REDIS_TOKEN) {
+      redis = new Redis({
+        url: REDIS_URL,
+        token: REDIS_TOKEN,
+      });
+      console.log("✅ Redis rate limiter initialized");
+    } else {
+      // Fallback ke memory store
+      memoryStore = new MemoryStore();
+      console.log("ℹ️ Using memory rate limiter");
+    }
+  } catch (error) {
+    console.warn("⚠️ Redis initialization failed, using memory store:", error);
+    memoryStore = new MemoryStore();
+  }
+
+  return async (
+    key: string
+  ): Promise<{ current: number; isLimited: boolean }> => {
+    const MAX_REQUESTS = 100;
+    const WINDOW_SECONDS = 60 * 15; // 15 minutes
+
+    try {
+      let current: number;
+
+      if (redis) {
+        // Gunakan Redis jika tersedia
+        current = await redis.incr(key);
+        if (current === 1) {
+          await redis.expire(key, WINDOW_SECONDS);
+        }
+      } else {
+        // Fallback ke memory store
+        current = await memoryStore!.increment(key, WINDOW_SECONDS);
+      }
+
+      return {
+        current,
+        isLimited: current > MAX_REQUESTS,
+      };
+    } catch (error) {
+      console.error("Rate limiter error:", error);
+      // Jika error, izinkan request (fail open)
+      return { current: 1, isLimited: false };
+    }
+  };
+};
+
+// Rate limiting middleware dengan fallback
+const rateLimitMiddleware = j.middleware(async ({ c, ctx, next }) => {
+  try {
+    // Inisialisasi rate limiter
+    const rateLimiter = createRateLimiter(c);
 
     const ip =
       c.req.header("x-forwarded-for") ||
@@ -73,34 +168,30 @@ export const rateLimitMiddleware = j.middleware(async ({ c, next }) => {
       "127.0.0.1";
 
     const key = `rate-limit:${ip}:${c.req.path}`;
-    const RATE_LIMIT = 100;
 
-    const current = (await redis.get<number>(key)) || 0;
+    // Check rate limit
+    const { current, isLimited } = await rateLimiter(key);
 
-    if (current >= RATE_LIMIT) {
+    if (isLimited) {
       throw new HTTPException(429, {
         message: "Too Many Requests",
       });
     }
 
-    await redis.incr(key);
+    // Set headers
+    c.header("X-RateLimit-Limit", "100");
+    c.header("X-RateLimit-Remaining", (100 - current).toString());
 
-    if (current === 0) {
-      await redis.expire(key, 15 * 60);
-    }
-
-    c.header("X-RateLimit-Limit", RATE_LIMIT.toString());
-    c.header("X-RateLimit-Remaining", (RATE_LIMIT - current - 1).toString());
-
-    return next({});
+    return next(ctx);
   } catch (error) {
-    if (error instanceof HTTPException) {
+    // Jika error adalah rate limit, throw
+    if (error instanceof HTTPException && error.status === 429) {
       throw error;
     }
 
-    throw new HTTPException(500, {
-      message: "Internal Server Error during rate limiting",
-    });
+    // Untuk error lainnya, log dan lanjutkan
+    console.error("Rate limiting error:", error);
+    return next(ctx);
   }
 });
 
