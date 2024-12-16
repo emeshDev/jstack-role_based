@@ -5,6 +5,7 @@ import { handle } from "hono/vercel";
 import { apiRouter } from "./routers/api-router";
 import { authRouter } from "./routers/auth-router";
 import { testRouter } from "./routers/test-router";
+import { userRouter } from "./routers/user-router";
 
 const app = new Hono().basePath("/api").use(cors());
 
@@ -16,6 +17,7 @@ const app = new Hono().basePath("/api").use(cors());
 // console.log("Registering routes...");
 const appRouter = app
   .route("/authsession", authRouter)
+  .route("/users", userRouter)
   .route("/v1", apiRouter)
   .route("/test", testRouter);
 // console.log("Routes registered");

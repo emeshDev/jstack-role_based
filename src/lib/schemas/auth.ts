@@ -1,5 +1,9 @@
 // src/lib/schemas/auth.ts
 import { z } from "zod";
+import { Role } from "@/types";
+
+// Buat enum schema dari Role
+const roleEnum = z.nativeEnum(Role);
 
 export const signUpSchema = z.object({
   email: z.string().email("Invalid email format").min(1, "Email is required"),
@@ -14,6 +18,7 @@ export const signUpSchema = z.object({
     .string()
     .min(2, "Full name must be at least 2 characters")
     .max(50, "Full name must not exceed 50 characters"),
+  role: roleEnum.optional().default(Role.USER), // Tambahkan role field dengan default USER
 });
 
 export const signInSchema = z.object({

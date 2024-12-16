@@ -4,6 +4,7 @@ import { getDeviceId } from "@/lib/device";
 import { useLogoutMutation, useSyncAuthSessionMutation } from "@/lib/store/api";
 import { resetState } from "@/lib/store/rootReducer";
 import { persistor } from "@/lib/store/store";
+import { Role } from "@/types";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { useDispatch } from "react-redux";
@@ -55,7 +56,8 @@ export const useAuth = (options: UseAuthOptions = {}) => {
           ? new Date(user.email_confirmed_at).toISOString()
           : null,
         deviceId,
-      });
+        role: user.user_metadata?.role as Role,
+      }).unwrap();
 
       if (options.redirectTo) {
         // Use Next.js router for client-side navigation
@@ -101,17 +103,22 @@ export const useAuth = (options: UseAuthOptions = {}) => {
   const signUp = async (
     email: string,
     password: string,
-    metadata?: { full_name?: string }
+    metadata?: { full_name?: string; role?: Role }
   ) => {
     try {
       setIsLoading(true);
       setError(null);
 
+      console.log("Signup metadata:", metadata); // Debug log
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: metadata,
+          data: {
+            ...metadata,
+            role: metadata?.role, // Pastikan role tidak di-override
+          },
           emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });

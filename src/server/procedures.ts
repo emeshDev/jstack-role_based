@@ -3,8 +3,21 @@ import { j } from "./__internals/j";
 import { HTTPException } from "hono/http-exception";
 import { supabase } from "../lib/auth";
 import { Redis } from "@upstash/redis";
+import { Role } from "@prisma/client";
+import { db } from "@/db";
+import { User } from "@supabase/supabase-js";
+import { Bindings, getServerEnv } from "./env";
 
-const authMiddleware = j.middleware(async ({ c, next }) => {
+interface AuthContext {
+  supabaseUser: User; // Gunakan tipe User dari @supabase/supabase-js
+  token: string;
+}
+
+interface AuthContextWithRole extends AuthContext {
+  userRole: Role;
+}
+
+const authMiddleware = j.middleware<{}, AuthContext>(async ({ c, next }) => {
   try {
     const cookieHeader = c.req.header("cookie");
     const cookies = cookieHeader
@@ -93,9 +106,14 @@ class MemoryStore {
   }
 }
 
-// Helper untuk get env variables dengan prioritas
+// // Helper untuk get env variables dengan prioritas
+// const getEnvVar = (c: any, key: string): string => {
+//   return c?.env[key] || process.env[key] || "";
+// };
+// Ubah helper getEnvVar
 const getEnvVar = (c: any, key: string): string => {
-  return c?.env[key] || process.env[key] || "";
+  // Prioritaskan process.env karena kita tidak pakai edge
+  return getServerEnv(key as keyof Bindings);
 };
 
 // Factory untuk rate limiter
@@ -195,6 +213,50 @@ const rateLimitMiddleware = j.middleware(async ({ c, ctx, next }) => {
   }
 });
 
+const checkRole = (allowedRoles: Role[]) =>
+  j.middleware<AuthContext, AuthContextWithRole>(async ({ c, ctx, next }) => {
+    try {
+      // Ambil role dari metadata Supabase dulu
+      const userRole = ctx.supabaseUser.user_metadata?.role as Role;
+
+      const user = await db.user.findUnique({
+        where: { id: ctx.supabaseUser.id },
+        select: { role: true },
+      });
+
+      if (!user) {
+        throw new HTTPException(404, { message: "User not found" });
+      }
+
+      // Prioritaskan role dari database, fallback ke metadata jika perlu
+      const effectiveRole = user.role || userRole || Role.USER;
+
+      if (!allowedRoles.includes(effectiveRole)) {
+        throw new HTTPException(403, {
+          message: "You don't have permission to perform this action",
+        });
+      }
+
+      return next({
+        ...ctx,
+        userRole: user.role,
+      });
+    } catch (error) {
+      throw new HTTPException(401, {
+        message: error instanceof Error ? error.message : "Unauthorized",
+      });
+    }
+  });
+
 export const baseProcedure = j.procedure;
 export const publicProcedure = baseProcedure.use(rateLimitMiddleware);
 export const privateProcedure = publicProcedure.use(authMiddleware);
+
+// Predefined procedures for different role combinations
+export const adminProcedure = privateProcedure.use(
+  checkRole(["ADMIN", "SUPER_ADMIN"])
+);
+
+export const superAdminProcedure = privateProcedure.use(
+  checkRole(["SUPER_ADMIN"])
+);

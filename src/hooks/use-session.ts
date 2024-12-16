@@ -1,14 +1,21 @@
 "use client";
 // src/hooks/use-session.ts
 import { useState, useEffect, useCallback } from "react";
-import { Session, SessionError } from "@/types";
+import { Role, Session, SessionError } from "@/types";
 import { getSession, supabase } from "@/lib/auth";
+
+interface UserMetadata {
+  role?: Role;
+  [key: string]: any;
+}
 
 interface RawSession {
   user: {
     id: string;
     email: string;
     name?: string | null;
+    user_metadata?: UserMetadata;
+    role: string;
     emailVerified?: string | Date | null;
     deviceId?: string | null;
   };
@@ -26,11 +33,15 @@ export function useSession() {
       const fetchedSession = (await getSession()) as RawSession | null;
 
       if (fetchedSession?.user) {
+        // Ambil role dari metadata, bukan dari role default Supabase
+        const userRole = fetchedSession.user.user_metadata?.role || Role.USER;
+
         const safeSession: Session = {
           user: {
             id: fetchedSession.user.id,
             email: fetchedSession.user.email,
             name: fetchedSession.user.name ?? null,
+            role: userRole as Role,
             emailVerified: fetchedSession.user.emailVerified
               ? new Date(fetchedSession.user.emailVerified)
               : null,
@@ -109,5 +120,9 @@ export function useSession() {
     isLoading,
     error,
     refetch: fetchSession,
+    role: session?.user.role,
+    isAdmin:
+      session?.user.role === "ADMIN" || session?.user.role === "SUPER_ADMIN",
+    isSuperAdmin: session?.user.role === "SUPER_ADMIN",
   };
 }

@@ -6,6 +6,7 @@ import { signUpSchema, type SignUpForm } from "@/lib/schemas/auth";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
+import { Role } from "@/types";
 
 export default function SignUp() {
   const router = useRouter();
@@ -15,7 +16,9 @@ export default function SignUp() {
     email: "",
     password: "",
     fullName: "",
+    role: Role.USER, // Default role
   });
+
   const [validationErrors, setValidationErrors] = useState<
     Partial<Record<keyof SignUpForm, string>>
   >({});
@@ -28,6 +31,7 @@ export default function SignUp() {
       const validatedData = signUpSchema.parse(formData);
       await signUp(validatedData.email, validatedData.password, {
         full_name: validatedData.fullName,
+        role: formData.role,
       });
       router.push("/auth/verify-email");
     } catch (err) {
@@ -115,6 +119,36 @@ export default function SignUp() {
                     {validationErrors.fullName}
                   </p>
                 )}
+              </div>
+            </div>
+
+            {/* Role selection for testing */}
+            <div>
+              <label
+                htmlFor="role"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Role (Testing Only)
+              </label>
+              <div className="mt-1">
+                <select
+                  id="role"
+                  name="role"
+                  value={formData.role}
+                  onChange={(e) =>
+                    setFormData({ ...formData, role: e.target.value as Role })
+                  }
+                  className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm 
+                   text-gray-900 
+                   focus:outline-none focus:ring-indigo-500 focus:border-indigo-500
+                   dark:bg-gray-800 dark:text-white dark:border-gray-600"
+                >
+                  {Object.values(Role).map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

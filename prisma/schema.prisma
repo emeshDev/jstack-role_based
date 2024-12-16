@@ -16,15 +16,37 @@ model Post {
   @@index([name])
 }
 
+// Definisi Role enum
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  USER
+}
+
 model User {
   id            String    @id // Menggunakan Supabase user.id
   email         String    @unique
   name          String?
-  role          String    @default("user")
+  role          Role      @default(USER)
   emailVerified DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  
+  // Sessions from previous schema
   sessions      Session[]
+
+  // Project management relations
+  authoredTasks    Task[]           @relation("TaskAuthor")
+  assignedTasks    Task[]           @relation("TaskAssignee")
+  taskAssignments  TaskAssignment[]
+  attachments      Attachment[]
+  comments         Comment[]
+  team            Team?             @relation(fields: [teamId], references: [id])
+  teamId          Int?
+
+  // Audit fields
+  createdProjects Project[]        @relation("ProjectCreator")
+  updatedProjects Project[]        @relation("ProjectUpdater")
 }
 
 model Session {
@@ -39,4 +61,136 @@ model Session {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   deviceId      String?
+}
+
+model Team {
+  id                   Int           @id @default(autoincrement())
+  teamName             String
+  productOwnerUserId   String?       // Changed to String to match User.id
+  projectManagerUserId String?       // Changed to String to match User.id
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  
+  // Relations
+  projectTeams         ProjectTeam[]
+  members             User[]
+}
+
+model Project {
+  id              Int           @id @default(autoincrement())
+  name            String
+  description     String?
+  startDate       DateTime?
+  endDate         DateTime?
+  status          ProjectStatus @default(DRAFT)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Creator and Updater tracking
+  createdById     String
+  createdBy       User          @relation("ProjectCreator", fields: [createdById], references: [id])
+  updatedById     String
+  updatedBy       User          @relation("ProjectUpdater", fields: [updatedById], references: [id])
+  
+  // Relations
+  tasks           Task[]
+  projectTeams    ProjectTeam[]
+}
+
+enum ProjectStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+model ProjectTeam {
+  id        Int      @id @default(autoincrement())
+  teamId    Int
+  projectId Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  team      Team     @relation(fields: [teamId], references: [id])
+  project   Project  @relation(fields: [projectId], references: [id])
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Task {
+  id             Int            @id @default(autoincrement())
+  title          String
+  description    String?
+  status         TaskStatus     @default(TODO)
+  priority       TaskPriority   @default(MEDIUM)
+  tags           String?        // Consider using a separate TagsOnTasks model for better tag management
+  startDate      DateTime?
+  dueDate        DateTime?
+  points         Int?
+  projectId      Int
+  authorUserId   String         // Changed to String to match User.id
+  assignedUserId String?        // Changed to String to match User.id
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  
+  // Relations
+  project         Project          @relation(fields: [projectId], references: [id])
+  author          User             @relation("TaskAuthor", fields: [authorUserId], references: [id])
+  assignee        User?            @relation("TaskAssignee", fields: [assignedUserId], references: [id])
+  taskAssignments TaskAssignment[]
+  attachments     Attachment[]
+  comments        Comment[]
+}
+
+model TaskAssignment {
+  id        Int      @id @default(autoincrement())
+  userId    String   // Changed to String to match User.id
+  taskId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  user      User     @relation(fields: [userId], references: [id])
+  task      Task     @relation(fields: [taskId], references: [id])
+}
+
+model Attachment {
+  id           Int      @id @default(autoincrement())
+  fileURL      String
+  fileName     String?
+  taskId       Int
+  uploadedById String   // Changed to String to match User.id
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relations
+  task         Task     @relation(fields: [taskId], references: [id])
+  uploadedBy   User     @relation(fields: [uploadedById], references: [id])
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  text      String
+  taskId    Int
+  userId    String   // Changed to String to match User.id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  task      Task     @relation(fields: [taskId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
 }

@@ -11,3 +11,8 @@ export type Bindings = {
   REDIS_URL: string;
   REDIS_TOKEN: string;
 };
+
+// Helper function untuk mendapatkan env vars dari manapun
+export const getServerEnv = (key: keyof Bindings): string => {
+  return process.env[key] || "";
+};

@@ -1,10 +1,12 @@
-// this is auth router /controller , i hope you wont changed it
 // src/server/routers/auth-router.ts
 import { db } from "@/db";
 import { router } from "../__internals/router";
-import { privateProcedure } from "../procedures";
+import { privateProcedure, superAdminProcedure } from "../procedures";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { Role } from "@prisma/client";
+
+const roleEnum = z.enum(["SUPER_ADMIN", "ADMIN", "USER"]);
 
 export const authRouter = router({
   v1: privateProcedure
@@ -15,11 +17,29 @@ export const authRouter = router({
         name: z.string().optional(),
         emailVerified: z.string().nullable(),
         deviceId: z.string(),
+        role: roleEnum.optional(),
       })
     )
     .mutation(async ({ c, input, ctx }) => {
       try {
         const { supabaseUser, token } = ctx;
+
+        const existingUser = await db.user.findUnique({
+          where: { id: input.userId },
+          select: { role: true },
+        });
+
+        console.log("Auth Router Input:", input); // Debug log
+        console.log("Supabase User:", supabaseUser); // Debug log
+        console.log("User Metadata:", supabaseUser.user_metadata); // Debug log
+
+        // 2. Tentukan role dengan prioritas:
+        // - Jika user sudah ada di DB, gunakan role dari DB
+        // - Jika user baru, gunakan role dari metadata atau default USER
+        const userRole =
+          existingUser?.role ||
+          (supabaseUser.user_metadata?.role as Role) ||
+          Role.USER;
 
         // Single source of truth untuk user data
         const user = await db.user.upsert({
@@ -28,6 +48,7 @@ export const authRouter = router({
             id: input.userId,
             email: input.email,
             name: input.name,
+            role: userRole,
             emailVerified: input.emailVerified
               ? new Date(input.emailVerified)
               : null,
@@ -35,6 +56,8 @@ export const authRouter = router({
           update: {
             email: input.email,
             name: input.name,
+            // Jangan update role jika user sudah ada
+            ...(existingUser ? {} : { role: userRole }),
             emailVerified: input.emailVerified
               ? new Date(input.emailVerified)
               : null,
@@ -84,6 +107,30 @@ export const authRouter = router({
         });
       }
     }),
+
+  // Get current user role
+  getRole: privateProcedure.query(async ({ c, ctx }) => {
+    try {
+      const user = await db.user.findUnique({
+        where: { id: ctx.supabaseUser.id },
+        select: { role: true },
+      });
+
+      if (!user) {
+        throw new HTTPException(404, { message: "User not found" });
+      }
+
+      return c.json({
+        success: true,
+        role: user.role,
+      });
+    } catch (error) {
+      throw new HTTPException(500, {
+        message:
+          error instanceof Error ? error.message : "Failed to get user role",
+      });
+    }
+  }),
 
   updateSession: privateProcedure
     .input(

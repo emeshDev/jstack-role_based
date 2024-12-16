@@ -4,15 +4,18 @@
 import { useSession } from "@/hooks/use-session";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { Role } from "@/types";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   redirectTo?: string;
+  allowedRoles?: Role[]; // Optional array of allowed roles
 }
 
 export function ProtectedRoute({
   children,
   redirectTo = "/auth/signin",
+  allowedRoles, // Jika tidak diset, berarti route hanya butuh authentication
 }: ProtectedRouteProps) {
   const { session, isLoading } = useSession();
   const router = useRouter();
@@ -22,18 +25,34 @@ export function ProtectedRoute({
   useSessionTimeout();
 
   useEffect(() => {
-    // Hanya redirect jika benar-benar tidak ada session dan loading selesai
-    if (!isLoading && !session) {
-      const returnUrl = encodeURIComponent(pathname);
-      // router.replace(`${redirectTo}?from=${returnUrl}`);
-      // Gunakan window.location.replace untuk memastikan full page refresh
-      window.location.replace(`${redirectTo}?from=${returnUrl}`);
-    }
-  }, [session, isLoading, router, pathname, redirectTo]);
+    console.log("Session user:", session?.user);
+    console.log("User role:", session?.user?.role);
 
-  // Tampilkan children selama loading atau ada session
-  // Ini mencegah flash of blank page
-  if (isLoading || session) {
+    if (!isLoading) {
+      if (!session) {
+        // Redirect ke login jika tidak ada session
+        const returnUrl = encodeURIComponent(pathname);
+        window.location.replace(`${redirectTo}?from=${returnUrl}`);
+      } else if (allowedRoles && !allowedRoles.includes(session.user.role)) {
+        console.log("Role check failed:", {
+          userRole: session.user.role,
+          allowedRoles,
+        }); // Debug log
+        // Redirect ke home atau halaman unauthorized jika role tidak sesuai
+        window.location.replace("/unauthorized");
+      }
+    }
+  }, [session, isLoading, router, pathname, redirectTo, allowedRoles]);
+
+  // Show children if:
+  // 1. Still loading, OR
+  // 2. Has session AND either:
+  //    - No role restrictions, OR
+  //    - Has required role
+  if (
+    isLoading ||
+    (session && (!allowedRoles || allowedRoles.includes(session.user.role)))
+  ) {
     return <>{children}</>;
   }
 
@@ -48,11 +67,27 @@ export function useSessionTimeout() {
   useEffect(() => {
     if (!session) return;
 
-    // Set timeout untuk redirect 5 menit sebelum token expire
     const timeout = setTimeout(() => {
-      router.refresh(); // Force refresh page untuk revalidate session
+      router.refresh();
     }, 3300 * 1000); // 55 menit
 
     return () => clearTimeout(timeout);
   }, [session, router]);
+}
+
+// Untuk route yang hanya butuh authentication
+{
+  /* <ProtectedRoute>
+  <UserDashboard />
+</ProtectedRoute>
+
+// Untuk route yang membutuhkan role admin atau super admin
+<ProtectedRoute allowedRoles={[Role.ADMIN, Role.SUPER_ADMIN]}>
+  <AdminPanel />
+</ProtectedRoute>
+
+// Untuk route yang hanya bisa diakses super admin
+<ProtectedRoute allowedRoles={[Role.SUPER_ADMIN]}>
+  <SuperAdminSettings />
+</ProtectedRoute> */
 }

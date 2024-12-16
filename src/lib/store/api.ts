@@ -2,10 +2,13 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
 import { client } from "@/lib/client";
 import type { User, Session } from "@prisma/client";
+import { Role } from "@/types";
 
 interface AuthSessionResponse {
   success: boolean;
-  user: User;
+  user: User & {
+    role: Role; // Add role to user type
+  };
   session: Session;
 }
 
@@ -14,16 +17,42 @@ interface UpdateSessionResponse {
   session: Session;
 }
 
+interface GetRoleResponse {
+  success: boolean;
+  role: Role;
+}
+
+interface UserResponse {
+  id: string;
+  email: string;
+  name: string | null;
+  role: Role;
+  emailVerified: string | null;
+  createdAt: string;
+}
+
+interface GetUsersResponse {
+  success: boolean;
+  users: UserResponse[];
+}
+
+interface UpdateRoleResponse {
+  success: boolean;
+  user: User;
+}
+
 export const api = createApi({
   reducerPath: "api",
   baseQuery: async (args: unknown) => {
     try {
       const result = await args;
+      console.log("baseQuery response:", result);
       return { data: result };
     } catch (error) {
       return { error };
     }
   },
+  tagTypes: ["Users"],
   endpoints: (builder) => ({
     syncAuthSession: builder.mutation<
       AuthSessionResponse,
@@ -33,6 +62,7 @@ export const api = createApi({
         name?: string;
         emailVerified: string | null;
         deviceId: string;
+        role?: Role; // Optional role parameter
       }
     >({
       query: (data) =>
@@ -44,15 +74,38 @@ export const api = createApi({
           emailVerified: data.emailVerified
             ? new Date(data.emailVerified).toISOString()
             : null,
+          role: data.role, // Pass role if provided
         }),
-      transformResponse: (response: any): AuthSessionResponse => {
-        // Ensure the response matches the AuthSessionResponse interface
-        return {
-          success: true,
-          user: response.user, // Assuming the response directly contains the full User object
-          session: response.session, // Assuming the response directly contains the full Session object
-        };
+    }),
+
+    // New endpoint to get user role
+    getRole: builder.query<GetRoleResponse, void>({
+      query: () => client.authsession.getRole.$get(),
+    }),
+
+    getUsers: builder.query<GetUsersResponse, void>({
+      query: () => client.users.getUsers.$get(),
+      async transformResponse(baseQueryReturnValue: any) {
+        console.log("Transform input:", baseQueryReturnValue);
+
+        const data = await baseQueryReturnValue.json();
+        console.log("Transformed data:", data);
+
+        return data as GetUsersResponse;
       },
+      providesTags: ["Users"],
+    }),
+
+    // New endpoint to update user role (SUPER_ADMIN only)
+    updateUserRole: builder.mutation<
+      UpdateRoleResponse,
+      {
+        userId: string;
+        role: Role.ADMIN | Role.USER;
+      }
+    >({
+      query: (data) => client.users.updateRole.$post(data),
+      invalidatesTags: ["Users"],
     }),
 
     updateSession: builder.mutation<
@@ -60,12 +113,6 @@ export const api = createApi({
       { token: string; expiresAt: number }
     >({
       query: (data) => client.authsession.updateSession.$post(data),
-      transformResponse: (response: any): UpdateSessionResponse => {
-        return {
-          success: true,
-          session: response.session,
-        };
-      },
     }),
 
     logout: builder.mutation<{ success: boolean }, void>({
@@ -76,6 +123,9 @@ export const api = createApi({
 
 export const {
   useSyncAuthSessionMutation,
+  useGetRoleQuery,
+  useUpdateUserRoleMutation,
   useUpdateSessionMutation,
   useLogoutMutation,
+  useGetUsersQuery,
 } = api;
